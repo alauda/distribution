@@ -33,7 +33,8 @@ LABEL OPS_DISTROLESS_TAG="${OPS_DISTROLESS_TAG}"
 LABEL OPS_TOOLSETS_TAG="${OPS_TOOLSETS_TAG}"
 # 这一条命令会拷贝 /bin/bash 和 指向它的软链接 /bin/sh
 COPY --from=tools /bin/ /bin/
-COPY --from=tools /usr/local/bin/sed /usr/local/bin/
+COPY --from=tools /usr/local/bin/sed /usr/local/bin/tail \
+                  /usr/local/bin/
 
 COPY --from=assets / /
 VOLUME ["/var/lib/registry"]
