@@ -1,7 +1,8 @@
 # `FROM` instructions support variables that are declared by any `ARG` instructions that occur before the first `FROM`.
-ARG OPS_DISTROLESS_TAG=20220518112439
+ARG OPS_DISTROLESS_TAG=20220531
 ARG OPS_TOOLSETS_TAG=20220519070033
 ARG PRIVATE_REGISTRY
+
 
 FROM golang:1.11-alpine AS build
 
@@ -21,14 +22,22 @@ RUN chmod +x /init.sh
 
 
 FROM scratch AS assets
+
+ARG ALAUDA_UID="697"
+ARG ALAUDA_GID="697"
+
 COPY --from=build /go/src/github.com/docker/distribution/bin/registry /bin/
-COPY --from=build /init.sh /
-COPY cmd/registry/config-dev.yml /etc/docker/registry/config.yml
-COPY cmd/registry/config-alauda.yml /etc/docker/registry/config-alauda.yml
+COPY --from=build --chown=$ALAUDA_UID:$ALAUDA_GID /init.sh /
+COPY --chown=$ALAUDA_UID:$ALAUDA_GID cmd/registry/config-dev.yml /etc/docker/registry/config.yml
+COPY --chown=$ALAUDA_UID:$ALAUDA_GID cmd/registry/config-alauda.yml /etc/docker/registry/config-alauda.yml
 
 
 FROM ${PRIVATE_REGISTRY}/ops/toolset:${OPS_TOOLSETS_TAG} AS tools
-FROM ${PRIVATE_REGISTRY}/ops/distroless-static:${OPS_DISTROLESS_TAG}
+FROM ${PRIVATE_REGISTRY}/ops/distroless-static-nonroot:${OPS_DISTROLESS_TAG}
+
+ARG ALAUDA_UID="697"
+ARG ALAUDA_GID="697"
+
 LABEL OPS_DISTROLESS_TAG="${OPS_DISTROLESS_TAG}"
 LABEL OPS_TOOLSETS_TAG="${OPS_TOOLSETS_TAG}"
 # 这一条命令会拷贝 /bin/bash 和 指向它的软链接 /bin/sh
