@@ -38,7 +38,8 @@ LABEL OPS_DISTROLESS_TAG="${OPS_DISTROLESS_TAG}"
 LABEL OPS_TOOLSETS_TAG="${OPS_TOOLSETS_TAG}"
 
 COPY --from=tools /bin/ /bin/
-COPY --from=tools /usr/local/bin/cat /usr/local/bin/echo \
+COPY --from=tools /usr/local/bin/cat /usr/local/bin/cp \
+                  /usr/local/bin/chown /usr/local/bin/echo \
                   /usr/local/bin/grep /usr/local/bin/sed \
                   /usr/local/bin/sleep /usr/local/bin/tail \
                   /usr/local/bin/pkill \
