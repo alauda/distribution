@@ -1,5 +1,5 @@
 # `FROM` instructions support variables that are declared by any `ARG` instructions that occur before the first `FROM`.
-ARG OPS_DISTROLESS_TAG=20220531
+ARG OPS_DISTROLESS_TAG=20220518112439
 ARG OPS_TOOLSETS_TAG=20220623180902
 ARG PRIVATE_REGISTRY
 
@@ -33,7 +33,7 @@ COPY --chown=$ALAUDA_UID:$ALAUDA_GID cmd/registry/config-alauda.yml /etc/docker/
 
 
 FROM ${PRIVATE_REGISTRY}/ops/toolset:${OPS_TOOLSETS_TAG} AS tools
-FROM ${PRIVATE_REGISTRY}/ops/distroless-static-nonroot:${OPS_DISTROLESS_TAG}
+FROM ${PRIVATE_REGISTRY}/ops/distroless-static:${OPS_DISTROLESS_TAG}
 LABEL OPS_DISTROLESS_TAG="${OPS_DISTROLESS_TAG}"
 LABEL OPS_TOOLSETS_TAG="${OPS_TOOLSETS_TAG}"
 
