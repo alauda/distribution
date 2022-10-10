@@ -1,6 +1,6 @@
 # `FROM` instructions support variables that are declared by any `ARG` instructions that occur before the first `FROM`.
-ARG OPS_DISTROLESS_TAG=20220531
-ARG OPS_TOOLSETS_TAG=20220623180902
+ARG OPS_DISTROLESS_TAG=20220718
+ARG OPS_TOOLSETS_TAG=20221010150159
 ARG PRIVATE_REGISTRY
 
 
@@ -43,6 +43,7 @@ COPY --from=tools /usr/local/bin/cat /usr/local/bin/cp \
                   /usr/local/bin/chown /usr/local/bin/echo \
                   /usr/local/bin/grep /usr/local/bin/sed \
                   /usr/local/bin/sleep /usr/local/bin/tail \
+                  /usr/local/bin/find /usr/local/bin/xargs \
                   /usr/local/bin/pkill \
                   /usr/local/bin/
 
