@@ -40,11 +40,11 @@ LABEL OPS_TOOLSETS_TAG="${OPS_TOOLSETS_TAG}"
 # 这一条命令会拷贝 /bin/bash 和 指向它的软链接 /bin/sh
 COPY --from=tools /bin/ /bin/
 COPY --from=tools /usr/local/bin/cat /usr/local/bin/cp \
-                  /usr/local/bin/chown /usr/local/bin/echo \
-                  /usr/local/bin/grep /usr/local/bin/sed \
-                  /usr/local/bin/sleep /usr/local/bin/tail \
+                  /usr/local/bin/chmod /usr/local/bin/chown \
+                  /usr/local/bin/echo /usr/local/bin/grep \
+                  /usr/local/bin/sed /usr/local/bin/sleep \
+                  /usr/local/bin/tail /usr/local/bin/pkill \
                   /usr/local/bin/find /usr/local/bin/xargs \
-                  /usr/local/bin/pkill \
                   /usr/local/bin/
 
 COPY --from=assets / /
