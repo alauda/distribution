@@ -43,6 +43,7 @@ COPY --from=tools /usr/local/bin/cat /usr/local/bin/cp \
                   /usr/local/bin/chown /usr/local/bin/echo \
                   /usr/local/bin/grep /usr/local/bin/sed \
                   /usr/local/bin/sleep /usr/local/bin/tail \
+                  /usr/local/bin/find /usr/local/bin/xargs \
                   /usr/local/bin/pkill \
                   /usr/local/bin/
 
