@@ -28,8 +28,8 @@ ARG ALAUDA_GID="697"
 
 COPY --from=build /go/src/github.com/docker/distribution/bin/registry /bin/
 COPY --from=build --chown=$ALAUDA_UID:$ALAUDA_GID /init.sh /
-COPY --chown=$ALAUDA_UID:$ALAUDA_GID cmd/registry/config-dev.yml /etc/docker/registry/config.yml
-COPY --chown=$ALAUDA_UID:$ALAUDA_GID cmd/registry/config-alauda.yml /etc/docker/registry/config-alauda.yml
+COPY --chown=$ALAUDA_UID:$ALAUDA_GID --chmod=640 cmd/registry/config-dev.yml /etc/docker/registry/config.yml
+COPY --chown=$ALAUDA_UID:$ALAUDA_GID --chmod=640 cmd/registry/config-alauda.yml /etc/docker/registry/config-alauda.yml
 
 
 FROM ${PRIVATE_REGISTRY}/ops/toolset:${OPS_TOOLSETS_TAG} AS tools
