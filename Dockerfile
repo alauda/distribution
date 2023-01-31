@@ -1,6 +1,6 @@
 # `FROM` instructions support variables that are declared by any `ARG` instructions that occur before the first `FROM`.
 ARG OPS_DISTROLESS_TAG=20220718
-ARG OPS_TOOLSETS_TAG=20230119081035
+ARG OPS_TOOLSETS_TAG=20230131122040
 ARG PRIVATE_REGISTRY
 
 
