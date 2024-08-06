@@ -4,8 +4,9 @@ ARG OPS_TOOLSETS_TAG=20240314132050
 ARG PRIVATE_REGISTRY
 
 
-FROM golang:1.11-alpine AS build
+FROM golang:1.16-alpine AS build
 
+ENV GO111MODULE=auto
 ENV DISTRIBUTION_DIR /go/src/github.com/docker/distribution
 ENV BUILDTAGS include_oss include_gcs
 
