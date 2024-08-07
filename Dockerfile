@@ -25,10 +25,8 @@ RUN chmod +x /init.sh
 FROM ${PRIVATE_REGISTRY}/ops/toolset:${OPS_TOOLSETS_TAG} AS tools
 FROM scratch AS assets
 
-# 这一条命令会拷贝 /bin/bash 和 指向它的软链接 /bin/sh
 COPY --from=tools /bin/ /bin/
-# TODO: cp, chmod, chown, find, xargs 都是暂时添加的工具，以后应该删掉
-# 目前在等 cpaas-installer 改进，这样 initContainer 可以更容易地指定其他的镜像
+
 COPY --from=tools /usr/local/bin/cat /usr/local/bin/echo \
                   /usr/local/bin/grep /usr/local/bin/sed \
                   /usr/local/bin/sleep /usr/local/bin/tail \
@@ -36,6 +34,7 @@ COPY --from=tools /usr/local/bin/cat /usr/local/bin/echo \
                   /usr/local/bin/cp \
                   /usr/local/bin/chmod /usr/local/bin/chown \
                   /usr/local/bin/find /usr/local/bin/xargs \
+                  /usr/local/bin/mkdir \
                   /usr/local/bin/
 
 COPY --from=build --chmod=550 /go/src/github.com/docker/distribution/bin/registry /bin/
