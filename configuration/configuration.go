@@ -386,9 +386,9 @@ func (loglevel *Loglevel) UnmarshalYAML(unmarshal func(interface{}) error) error
 
 	loglevelString = strings.ToLower(loglevelString)
 	switch loglevelString {
-	case "error", "warn", "info", "debug":
+	case "error", "warn", "info", "debug", "fatal", "panic":
 	default:
-		return fmt.Errorf("Invalid loglevel %s Must be one of [error, warn, info, debug]", loglevelString)
+		return fmt.Errorf("Invalid loglevel %s Must be one of [error, warn, info, debug, fatal, panic]", loglevelString)
 	}
 
 	*loglevel = Loglevel(loglevelString)
@@ -578,7 +578,7 @@ type Events struct {
 	IncludeReferences bool `yaml:"includereferences"` // include reference data in manifest events
 }
 
-//Ignore configures mediaTypes and actions of the event, that it won't be propagated
+// Ignore configures mediaTypes and actions of the event, that it won't be propagated
 type Ignore struct {
 	MediaTypes []string `yaml:"mediatypes"` // target media types to ignore
 	Actions    []string `yaml:"actions"`    // ignore action types
