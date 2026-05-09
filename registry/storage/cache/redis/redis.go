@@ -210,7 +210,38 @@ func (rsrbds *repositoryScopedRedisBlobDescriptorService) Clear(ctx context.Cont
 		return distribution.ErrBlobUnknown
 	}
 
-	return rsrbds.upstream.Clear(ctx, dgst)
+	// Atomically revoke repo membership, drop the per-repo descriptor override,
+	// and clear the shared descriptor fields. Mirrors upstream v3.1.0
+	// (GHSA-f2g3-hh2r-cwgc / CVE-2026-35172): the partial-failure window
+	// between these ops is what the advisory closes.
+	if err := conn.Send("MULTI"); err != nil {
+		return err
+	}
+	if err := conn.Send("SREM", rsrbds.repositoryBlobSetKey(rsrbds.repo), dgst); err != nil {
+		return err
+	}
+	if err := conn.Send("DEL", rsrbds.blobDescriptorHashKey(dgst)); err != nil {
+		return err
+	}
+	if err := conn.Send("HDEL", rsrbds.upstream.blobDescriptorHashKey(dgst), "digest", "size", "mediatype"); err != nil {
+		return err
+	}
+	reply, err := conn.Do("EXEC")
+	if err != nil {
+		return err
+	}
+	// Match upstream go-redis Pipeliner.Exec semantics: surface per-command
+	// errors that EXEC otherwise hides inside the reply slice (e.g. WRONGTYPE
+	// on SREM/DEL/HDEL would silently leave shared descriptor fields behind).
+	if results, ok := reply.([]interface{}); ok {
+		for _, r := range results {
+			if e, ok := r.(redis.Error); ok {
+				return e
+			}
+		}
+	}
+
+	return nil
 }
 
 func (rsrbds *repositoryScopedRedisBlobDescriptorService) SetDescriptor(ctx context.Context, dgst digest.Digest, desc distribution.Descriptor) error {

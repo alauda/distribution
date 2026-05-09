@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"io"
+	"net/url"
 	"sync"
 	"testing"
 
@@ -79,6 +80,10 @@ func (m *mockChallenger) credentialStore() auth.CredentialStore {
 }
 
 func (m *mockChallenger) challengeManager() challenge.Manager {
+	return nil
+}
+
+func (m *mockChallenger) realmValidator() func(*url.URL) error {
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/docker/distribution"
@@ -130,7 +131,8 @@ func (pr *proxyingRegistry) Repository(ctx context.Context, name reference.Named
 				Actions:    []string{"pull"},
 			},
 		},
-		Logger: dcontext.GetLogger(ctx),
+		Logger:         dcontext.GetLogger(ctx),
+		RealmValidator: c.realmValidator(),
 	}
 
 	tr := transport.NewTransport(http.DefaultTransport,
@@ -194,6 +196,7 @@ type authChallenger interface {
 	tryEstablishChallenges(context.Context) error
 	challengeManager() challenge.Manager
 	credentialStore() auth.CredentialStore
+	realmValidator() func(*url.URL) error
 }
 
 type remoteAuthChallenger struct {
@@ -208,7 +211,25 @@ func (r *remoteAuthChallenger) credentialStore() auth.CredentialStore {
 }
 
 func (r *remoteAuthChallenger) challengeManager() challenge.Manager {
-	return r.cm
+	remote := r.remoteURL
+	return challenge.NewFilteringManager(r.cm, func(c challenge.Challenge) bool {
+		// Non-bearer challenges (e.g. basic against the upstream itself) are
+		// not redirectable to a realm and pass through unchanged.
+		if !strings.EqualFold(c.Scheme, "bearer") {
+			return true
+		}
+		return realmAllowed(&remote, c.Parameters["realm"])
+	})
+}
+
+func (r *remoteAuthChallenger) realmValidator() func(*url.URL) error {
+	remote := r.remoteURL
+	return func(realm *url.URL) error {
+		if realmAllowed(&remote, realm.String()) {
+			return nil
+		}
+		return fmt.Errorf("untrusted token auth realm: %s", realm.String())
+	}
 }
 
 // tryEstablishChallenges will attempt to get a challenge type for the upstream if none currently exist

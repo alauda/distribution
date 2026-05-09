@@ -124,10 +124,11 @@ type tokenHandler struct {
 	transport http.RoundTripper
 	clock     clock
 
-	offlineAccess bool
-	forceOAuth    bool
-	clientID      string
-	scopes        []Scope
+	offlineAccess  bool
+	forceOAuth     bool
+	clientID       string
+	scopes         []Scope
+	realmValidator func(*url.URL) error
 
 	tokenLock       sync.Mutex
 	tokenCache      string
@@ -192,11 +193,12 @@ type TokenHandlerOptions struct {
 	Transport   http.RoundTripper
 	Credentials CredentialStore
 
-	OfflineAccess bool
-	ForceOAuth    bool
-	ClientID      string
-	Scopes        []Scope
-	Logger        Logger
+	OfflineAccess  bool
+	ForceOAuth     bool
+	ClientID       string
+	Scopes         []Scope
+	Logger         Logger
+	RealmValidator func(*url.URL) error
 }
 
 // An implementation of clock for providing real time data.
@@ -225,14 +227,15 @@ func NewTokenHandler(transport http.RoundTripper, creds CredentialStore, scope s
 // options structure.
 func NewTokenHandlerWithOptions(options TokenHandlerOptions) AuthenticationHandler {
 	handler := &tokenHandler{
-		transport:     options.Transport,
-		creds:         options.Credentials,
-		offlineAccess: options.OfflineAccess,
-		forceOAuth:    options.ForceOAuth,
-		clientID:      options.ClientID,
-		scopes:        options.Scopes,
-		clock:         realClock{},
-		logger:        options.Logger,
+		transport:      options.Transport,
+		creds:          options.Credentials,
+		offlineAccess:  options.OfflineAccess,
+		forceOAuth:     options.ForceOAuth,
+		clientID:       options.ClientID,
+		scopes:         options.Scopes,
+		realmValidator: options.RealmValidator,
+		clock:          realClock{},
+		logger:         options.Logger,
 	}
 
 	return handler
@@ -485,6 +488,11 @@ func (th *tokenHandler) fetchToken(params map[string]string, scopes []string) (t
 	realmURL, err := url.Parse(realm)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("invalid token auth challenge realm: %s", err)
+	}
+	if th.realmValidator != nil {
+		if err := th.realmValidator(realmURL); err != nil {
+			return "", time.Time{}, err
+		}
 	}
 
 	service := params["service"]
