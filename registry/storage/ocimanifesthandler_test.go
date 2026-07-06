@@ -166,6 +166,44 @@ func TestVerifyOCIManifestNonDistributableLayer(t *testing.T) {
 	}
 }
 
+func TestVerifyOCIManifestNonDistributableZstdLayer(t *testing.T) {
+	ctx := context.Background()
+	inmemoryDriver := inmemory.New()
+	registry := createRegistry(t, inmemoryDriver,
+		ManifestURLsAllowRegexp(regexp.MustCompile("^https?://foo")),
+		ManifestURLsDenyRegexp(regexp.MustCompile("^https?://foo/nope")))
+	repo := makeRepository(t, registry, strings.ToLower(t.Name()))
+	manifestService := makeManifestService(t, repo)
+
+	config, err := repo.Blobs(ctx).Put(ctx, v1.MediaTypeImageConfig, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nonDistributableLayer := v1.Descriptor{
+		Digest:    digest.FromBytes([]byte("non-distributable-zstd-layer")),
+		Size:      42,
+		MediaType: v1.MediaTypeImageLayerNonDistributableZstd,
+		URLs:      []string{"https://foo/bar"},
+	}
+
+	m := ocischema.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: v1.MediaTypeImageManifest,
+		Config:    config,
+		Layers:    []v1.Descriptor{nonDistributableLayer},
+	}
+
+	dm, err := ocischema.FromStruct(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manifestService.Put(ctx, dm); err != nil {
+		t.Fatalf("expected non-distributable zstd layer manifest to verify: %v", err)
+	}
+}
+
 func TestVerifyOCIManifestBlobLayerAndConfig(t *testing.T) {
 	ctx := context.Background()
 	inmemoryDriver := inmemory.New()

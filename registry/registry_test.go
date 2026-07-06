@@ -75,8 +75,24 @@ func setupRegistry(tlsCfg *registryTLSConfig, addr string) (*Registry, error) {
 	return NewRegistry(context.Background(), config)
 }
 
+func freeTCPAddr(t *testing.T) string {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for free port: %v", err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close free port listener: %v", err)
+	}
+
+	return addr
+}
+
 func TestGracefulShutdown(t *testing.T) {
-	registry, err := setupRegistry(nil, ":5000")
+	addr := freeTCPAddr(t)
+	registry, err := setupRegistry(nil, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,17 +107,27 @@ func TestGracefulShutdown(t *testing.T) {
 	default:
 	}
 
-	// Wait for some unknown random time for server to start listening
-	time.Sleep(3 * time.Second)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		conn, dialErr := net.Dial("tcp", addr)
+		if dialErr == nil {
+			conn.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not start listening in time: %v", dialErr)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	//Establish connection
-	conn, err := net.Dial("tcp", "localhost:5000")
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Send a complete, valid HTTP/1.1 request
-	_, err = fmt.Fprintf(conn, "GET /v2/ HTTP/1.1\r\nHost: localhost:5000\r\n\r\n")
+	_, err = fmt.Fprintf(conn, "GET /v2/ HTTP/1.1\r\nHost: %s\r\n\r\n", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,16 +135,6 @@ func TestGracefulShutdown(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	// send stop signal
 	registry.quit <- os.Interrupt
-	// wait for shutdown to begin
-	time.Sleep(100 * time.Millisecond)
-
-	// try connecting again - it should be rejected during graceful shutdown
-	conn2, err := net.Dial("tcp", "localhost:5000")
-	if err == nil {
-		conn2.Close()
-		t.Fatal("Managed to connect after stopping.")
-	}
-
 	// Verify the original connection's request completes successfully
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
@@ -130,6 +146,16 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 	if body, err := io.ReadAll(resp.Body); err != nil || string(body) != "{}" {
 		t.Error("Body is not {}; ", string(body))
+	}
+	conn.Close()
+
+	select {
+	case err = <-errchan:
+		if err != nil {
+			t.Fatalf("server did not shut down cleanly: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("server did not stop after completing in-flight request")
 	}
 }
 

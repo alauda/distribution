@@ -90,12 +90,28 @@ func New(ctx context.Context, params *DriverParameters) (*Driver, error) {
 		maxRetries:    params.MaxRetries,
 		retryDelay:    retryDelay,
 	}
+	if err := d.ensureContainer(ctx); err != nil {
+		return nil, err
+	}
 	return &Driver{
 		baseEmbed: baseEmbed{
 			Base: base.Base{
 				StorageDriver: d,
 			},
 		}}, nil
+}
+
+func (d *driver) ensureContainer(ctx context.Context) error {
+	if _, err := d.client.GetProperties(ctx, nil); err != nil {
+		if !is404(err) {
+			return err
+		}
+		if _, createErr := d.client.Create(ctx, nil); createErr != nil && !bloberror.HasCode(createErr, bloberror.ContainerAlreadyExists) {
+			return fmt.Errorf("creating container: %w", createErr)
+		}
+	}
+
+	return nil
 }
 
 // Implement the storagedriver.StorageDriver interface.

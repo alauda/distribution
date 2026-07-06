@@ -51,7 +51,7 @@ func (lbs *linkedBlobStore) Stat(ctx context.Context, dgst digest.Digest) (v1.De
 }
 
 func (lbs *linkedBlobStore) Get(ctx context.Context, dgst digest.Digest) ([]byte, error) {
-	canonical, err := lbs.Stat(ctx, dgst) // access check
+	canonical, err := lbs.resolveDescriptor(ctx, dgst)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (lbs *linkedBlobStore) Get(ctx context.Context, dgst digest.Digest) ([]byte
 }
 
 func (lbs *linkedBlobStore) Open(ctx context.Context, dgst digest.Digest) (io.ReadSeekCloser, error) {
-	canonical, err := lbs.Stat(ctx, dgst) // access check
+	canonical, err := lbs.resolveDescriptor(ctx, dgst)
 	if err != nil {
 		return nil, err
 	}
@@ -69,17 +69,43 @@ func (lbs *linkedBlobStore) Open(ctx context.Context, dgst digest.Digest) (io.Re
 }
 
 func (lbs *linkedBlobStore) ServeBlob(ctx context.Context, w http.ResponseWriter, r *http.Request, dgst digest.Digest) error {
-	canonical, err := lbs.Stat(ctx, dgst) // access check
+	desc, err := lbs.Stat(ctx, dgst) // access check
 	if err != nil {
 		return err
 	}
 
-	if canonical.MediaType != "" {
+	if desc.MediaType != "" {
 		// Set the repository local content type.
-		w.Header().Set("Content-Type", canonical.MediaType)
+		w.Header().Set("Content-Type", desc.MediaType)
+	}
+	w.Header().Set("Docker-Content-Digest", desc.Digest.String())
+	w.Header().Set("ETag", fmt.Sprintf(`"%s"`, desc.Digest))
+
+	canonical, err := lbs.resolveDescriptor(ctx, dgst)
+	if err != nil {
+		return err
 	}
 
 	return lbs.blobServer.ServeBlob(ctx, w, r, canonical.Digest)
+}
+
+func (lbs *linkedBlobStore) resolveDescriptor(ctx context.Context, dgst digest.Digest) (v1.Descriptor, error) {
+	blobLinkPath, err := lbs.linkPath(lbs.repository.Named().Name(), dgst)
+	if err != nil {
+		return v1.Descriptor{}, err
+	}
+
+	target, err := lbs.blobStore.readlink(ctx, blobLinkPath)
+	if err != nil {
+		switch err := err.(type) {
+		case driver.PathNotFoundError:
+			return v1.Descriptor{}, distribution.ErrBlobUnknown
+		default:
+			return v1.Descriptor{}, err
+		}
+	}
+
+	return lbs.blobStore.statter.Stat(ctx, target)
 }
 
 func (lbs *linkedBlobStore) Put(ctx context.Context, mediaType string, p []byte) (v1.Descriptor, error) {
@@ -272,20 +298,39 @@ func (lbs *linkedBlobStore) Enumerate(ctx context.Context, ingestor func(digest.
 }
 
 func (lbs *linkedBlobStore) mount(ctx context.Context, sourceRepo reference.Named, dgst digest.Digest, sourceStat *v1.Descriptor) (v1.Descriptor, error) {
-	var stat v1.Descriptor
+	var (
+		stat          v1.Descriptor
+		canonicalDesc v1.Descriptor
+		repoBlobs     distribution.BlobStore
+	)
+
+	repo, err := lbs.registry.Repository(ctx, sourceRepo)
+	if err != nil {
+		return v1.Descriptor{}, err
+	}
+	repoBlobs = repo.Blobs(ctx)
+
 	if sourceStat == nil {
 		// look up the blob info from the sourceRepo if not already provided
-		repo, err := lbs.registry.Repository(ctx, sourceRepo)
-		if err != nil {
-			return v1.Descriptor{}, err
-		}
-		stat, err = repo.Blobs(ctx).Stat(ctx, dgst)
+		stat, err = repoBlobs.Stat(ctx, dgst)
 		if err != nil {
 			return v1.Descriptor{}, err
 		}
 	} else {
 		// use the provided blob info
 		stat = *sourceStat
+	}
+
+	canonicalDesc = stat
+	if sourceLinkedBlobStore, ok := repoBlobs.(*linkedBlobStore); ok {
+		canonicalDesc, err = sourceLinkedBlobStore.resolveDescriptor(ctx, dgst)
+		if err != nil {
+			return v1.Descriptor{}, err
+		}
+	}
+	canonicalDesc.Size = stat.Size
+	if canonicalDesc.MediaType == "" {
+		canonicalDesc.MediaType = "application/octet-stream"
 	}
 
 	desc := v1.Descriptor{
@@ -297,7 +342,7 @@ func (lbs *linkedBlobStore) mount(ctx context.Context, sourceRepo reference.Name
 		MediaType: "application/octet-stream",
 		Digest:    dgst,
 	}
-	return desc, lbs.linkBlob(ctx, desc)
+	return desc, lbs.linkBlob(ctx, canonicalDesc, dgst)
 }
 
 // newBlobUpload allocates a new upload controller with the given state.
@@ -390,7 +435,16 @@ func (lbs *linkedBlobStatter) Stat(ctx context.Context, dgst digest.Digest) (v1.
 	// TODO(stevvooe): Look up repository local mediatype and replace that on
 	// the returned descriptor.
 
-	return lbs.blobStore.statter.Stat(ctx, target)
+	desc, err := lbs.blobStore.statter.Stat(ctx, target)
+	if err != nil {
+		return v1.Descriptor{}, err
+	}
+
+	if dgst != target {
+		desc.Digest = dgst
+	}
+
+	return desc, nil
 }
 
 func (lbs *linkedBlobStatter) Clear(ctx context.Context, dgst digest.Digest) (err error) {
