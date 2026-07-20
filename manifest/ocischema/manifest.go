@@ -55,12 +55,18 @@ type Manifest struct {
 	// MediaType is the media type of this schema.
 	MediaType string `json:"mediaType,omitempty"`
 
+	// ArtifactType specifies the IANA media type of artifact when the manifest is used for an artifact.
+	ArtifactType string `json:"artifactType,omitempty"`
+
 	// Config references the image configuration as a blob.
 	Config v1.Descriptor `json:"config"`
 
 	// Layers lists descriptors for the layers referenced by the
 	// configuration.
 	Layers []v1.Descriptor `json:"layers"`
+
+	// Subject is an optional link to another manifest.
+	Subject *v1.Descriptor `json:"subject,omitempty"`
 
 	// Annotations contains arbitrary metadata for the image manifest.
 	Annotations map[string]string `json:"annotations,omitempty"`

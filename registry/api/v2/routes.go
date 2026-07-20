@@ -11,6 +11,7 @@ import (
 const (
 	RouteNameBase            = "base"
 	RouteNameManifest        = "manifest"
+	RouteNameReferrers       = "referrers"
 	RouteNameTags            = "tags"
 	RouteNameBlob            = "blob"
 	RouteNameBlobUpload      = "blob-upload"

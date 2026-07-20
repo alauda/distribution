@@ -65,7 +65,7 @@ func (bw *blobWriter) Commit(ctx context.Context, desc v1.Descriptor) (v1.Descri
 	bw.Close()
 	desc.Size = bw.Size()
 
-	canonical, err := bw.validateBlob(ctx, desc)
+	validated, canonical, err := bw.validateBlob(ctx, desc)
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
@@ -74,7 +74,7 @@ func (bw *blobWriter) Commit(ctx context.Context, desc v1.Descriptor) (v1.Descri
 		return v1.Descriptor{}, err
 	}
 
-	if err := bw.blobStore.linkBlob(ctx, canonical, desc.Digest); err != nil {
+	if err := bw.blobStore.linkBlob(ctx, canonical, validated.Digest); err != nil {
 		return v1.Descriptor{}, err
 	}
 
@@ -88,7 +88,7 @@ func (bw *blobWriter) Commit(ctx context.Context, desc v1.Descriptor) (v1.Descri
 	}
 
 	bw.committed = true
-	return canonical, nil
+	return validated, nil
 }
 
 // Cancel the blob upload process, releasing any resources associated with
@@ -161,16 +161,17 @@ func (bw *blobWriter) Close() error {
 
 // validateBlob checks the data against the digest, returning an error if it
 // does not match. The canonical descriptor is returned.
-func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.Descriptor, error) {
+func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.Descriptor, v1.Descriptor, error) {
 	var (
 		verified, fullHash bool
 		canonical          digest.Digest
 	)
+	providedDigest := desc.Digest
 
 	if desc.Digest == "" {
 		// if no descriptors are provided, we have nothing to validate
 		// against. We don't really want to support this for the registry.
-		return v1.Descriptor{}, distribution.ErrBlobInvalidDigest{
+		return v1.Descriptor{}, v1.Descriptor{}, distribution.ErrBlobInvalidDigest{
 			Reason: fmt.Errorf("cannot validate against empty digest"),
 		}
 	}
@@ -187,11 +188,11 @@ func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.
 			desc.Size = 0
 		default:
 			// Any other error we want propagated up the stack.
-			return v1.Descriptor{}, err
+			return v1.Descriptor{}, v1.Descriptor{}, err
 		}
 	} else {
 		if fi.IsDir() {
-			return v1.Descriptor{}, fmt.Errorf("unexpected directory at upload location %q", bw.path)
+			return v1.Descriptor{}, v1.Descriptor{}, fmt.Errorf("unexpected directory at upload location %q", bw.path)
 		}
 
 		size = fi.Size()
@@ -199,7 +200,7 @@ func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.
 
 	if desc.Size > 0 {
 		if desc.Size != size {
-			return v1.Descriptor{}, distribution.ErrBlobInvalidLength
+			return v1.Descriptor{}, v1.Descriptor{}, distribution.ErrBlobInvalidLength
 		}
 	} else {
 		// if provided 0 or negative length, we can assume caller doesn't know or
@@ -227,7 +228,7 @@ func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.
 		// Not using resumable digests, so we need to hash the entire layer.
 		fullHash = true
 	} else {
-		return v1.Descriptor{}, err
+		return v1.Descriptor{}, v1.Descriptor{}, err
 	}
 
 	if fullHash {
@@ -250,14 +251,14 @@ func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.
 			// Read the file from the backend driver and validate it.
 			fr, err := newFileReader(ctx, bw.driver, bw.path, desc.Size)
 			if err != nil {
-				return v1.Descriptor{}, err
+				return v1.Descriptor{}, v1.Descriptor{}, err
 			}
 			defer fr.Close()
 
 			tr := io.TeeReader(fr, digester.Hash())
 
 			if _, err := io.Copy(verifier, tr); err != nil {
-				return v1.Descriptor{}, err
+				return v1.Descriptor{}, v1.Descriptor{}, err
 			}
 
 			canonical = digester.Digest()
@@ -272,20 +273,21 @@ func (bw *blobWriter) validateBlob(ctx context.Context, desc v1.Descriptor) (v1.
 				"provided":  desc.Digest,
 			}, "canonical", "provided").
 			Errorf("canonical digest does match provided digest")
-		return v1.Descriptor{}, distribution.ErrBlobInvalidDigest{
+		return v1.Descriptor{}, v1.Descriptor{}, distribution.ErrBlobInvalidDigest{
 			Digest: desc.Digest,
 			Reason: fmt.Errorf("content does not match digest"),
 		}
 	}
 
-	// update desc with canonical hash
-	desc.Digest = canonical
-
 	if desc.MediaType == "" {
 		desc.MediaType = "application/octet-stream"
 	}
 
-	return desc, nil
+	canonicalDesc := desc
+	canonicalDesc.Digest = canonical
+	desc.Digest = providedDigest
+
+	return desc, canonicalDesc, nil
 }
 
 // moveBlob moves the data into its final, hash-qualified destination,

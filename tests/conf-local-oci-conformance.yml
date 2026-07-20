@@ -1,0 +1,29 @@
+version: 0.1
+log:
+  level: debug
+  fields:
+    service: registry
+    environment: local-oci-conformance
+storage:
+  delete:
+    enabled: true
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /Users/mac/tcy/registry/old/official-community-e2e/distribution/tests/local-registry-data
+  maintenance:
+    uploadpurging:
+      enabled: false
+  tag:
+    concurrencylimit: 8
+http:
+  addr: :5006
+  debug:
+    addr: :5007
+  headers:
+    X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3

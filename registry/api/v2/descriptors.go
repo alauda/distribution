@@ -7,6 +7,7 @@ import (
 	"github.com/distribution/distribution/v3/registry/api/errcode"
 	"github.com/distribution/reference"
 	"github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var routeDescriptorsMap map[string]RouteDescriptor
@@ -721,6 +722,57 @@ var routeDescriptors = []RouteDescriptor{
 									errcode.ErrorCodeUnsupported,
 								},
 							},
+						},
+					},
+				},
+			},
+		},
+	},
+	{
+		Name:        RouteNameReferrers,
+		Path:        "/v2/{name:" + reference.NameRegexp.String() + "}/referrers/{digest:" + digest.DigestRegexp.String() + "}",
+		Entity:      "Referrers",
+		Description: "Retrieve the list of manifests and indexes that refer to a subject manifest.",
+		Methods: []MethodDescriptor{
+			{
+				Method:      http.MethodGet,
+				Description: "Fetch the referrers list for the specified digest.",
+				Requests: []RequestDescriptor{
+					{
+						Headers: []ParameterDescriptor{
+							hostHeader,
+							authHeader,
+						},
+						PathParameters: []ParameterDescriptor{
+							nameParameterDescriptor,
+							digestPathParameter,
+						},
+						Successes: []ResponseDescriptor{
+							{
+								StatusCode:  http.StatusOK,
+								Description: "An OCI image index containing descriptors for referrers to the specified digest.",
+								Body: BodyDescriptor{
+									ContentType: v1.MediaTypeImageIndex,
+									Format: `{
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "manifests": [
+        {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "<digest>",
+            "size": <size>,
+            "artifactType": "<artifactType>"
+        }
+    ]
+}`,
+								},
+							},
+						},
+						Failures: []ResponseDescriptor{
+							unauthorizedResponseDescriptor,
+							repositoryNotFoundResponseDescriptor,
+							deniedResponseDescriptor,
+							tooManyRequestsDescriptor,
 						},
 					},
 				},

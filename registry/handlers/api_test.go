@@ -23,6 +23,7 @@ import (
 	"github.com/distribution/distribution/v3"
 	"github.com/distribution/distribution/v3/configuration"
 	"github.com/distribution/distribution/v3/manifest/manifestlist"
+	"github.com/distribution/distribution/v3/manifest/ocischema"
 	"github.com/distribution/distribution/v3/manifest/schema2"
 	"github.com/distribution/distribution/v3/registry/api/errcode"
 	v2 "github.com/distribution/distribution/v3/registry/api/v2"
@@ -877,6 +878,349 @@ func TestBlobDeleteDisabled(t *testing.T) {
 	defer resp.Body.Close()
 
 	checkResponse(t, "status of disabled delete", resp, http.StatusMethodNotAllowed)
+}
+
+func TestBlobUploadRejectsOutOfOrderChunk(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+	uploadURLBase, _ := startPushLayer(t, env, imageName)
+
+	resp, err := doPushChunk(t, uploadURLBase, bytes.NewReader(make([]byte, 1024)), chunkOptions{contentRange: "1024-2047"})
+	if err != nil {
+		t.Fatalf("unexpected error sending out-of-order chunk: %v", err)
+	}
+	defer resp.Body.Close()
+
+	checkResponse(t, "rejecting out-of-order chunk", resp, http.StatusRequestedRangeNotSatisfiable)
+}
+
+func TestBlobUploadRejectsFinalPutWithStaleUploadState(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+	initialUploadURL, _ := startPushLayer(t, env, imageName)
+
+	nextUploadURL, _ := pushChunk(t, env.builder, imageName, initialUploadURL, bytes.NewReader(make([]byte, 1024)), 1024)
+	if nextUploadURL == "" {
+		t.Fatal("expected updated upload location after first chunk")
+	}
+
+	resp, err := doPushChunk(t, initialUploadURL, bytes.NewReader(make([]byte, 1024)), chunkOptions{contentRange: "1024-2047"})
+	if err != nil {
+		t.Fatalf("unexpected error sending chunk with stale upload state: %v", err)
+	}
+	defer resp.Body.Close()
+
+	checkResponse(t, "rejecting stale-state chunk", resp, http.StatusRequestedRangeNotSatisfiable)
+}
+
+func TestBlobUploadRejectsOutOfOrderFinalPutChunk(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+	payload := bytes.Repeat([]byte("a"), 3072)
+	dgst := digest.FromBytes(payload)
+	uploadURLBase, _ := startPushLayer(t, env, imageName)
+
+	currentUploadURL, _ := pushChunk(t, env.builder, imageName, uploadURLBase, bytes.NewReader(payload[:1024]), 1024)
+
+	resp, err := doCompleteChunk(t, currentUploadURL, dgst, bytes.NewReader(payload[2048:]), chunkOptions{contentRange: "2048-3071"})
+	if err != nil {
+		t.Fatalf("unexpected error sending out-of-order final put chunk: %v", err)
+	}
+	defer resp.Body.Close()
+
+	checkResponse(t, "rejecting out-of-order final put chunk", resp, http.StatusRequestedRangeNotSatisfiable)
+}
+
+func TestBlobUploadSupportsSHA512Digest(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+	payload := []byte("oci conformance sha512 blob payload")
+	dgst := digest.SHA512.FromBytes(payload)
+
+	uploadURLBase, _ := startPushLayer(t, env, imageName)
+	resp, err := doPushLayer(t, env.builder, imageName, dgst, uploadURLBase, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("unexpected error pushing sha512 layer: %v", err)
+	}
+	defer resp.Body.Close()
+
+	checkResponse(t, "pushing sha512 layer", resp, http.StatusCreated)
+	ref, _ := reference.WithDigest(imageName, dgst)
+	expectedLayerURL, err := env.builder.BuildBlobURL(ref)
+	if err != nil {
+		t.Fatalf("error building expected layer url: %v", err)
+	}
+	checkHeaders(t, resp, http.Header{
+		"Location":              []string{expectedLayerURL},
+		"Content-Length":        []string{"0"},
+		"Docker-Content-Digest": []string{dgst.String()},
+	})
+
+	getResp, err := http.Get(expectedLayerURL)
+	if err != nil {
+		t.Fatalf("unexpected error fetching sha512 layer: %v", err)
+	}
+	defer getResp.Body.Close()
+
+	checkResponse(t, "fetching sha512 layer", getResp, http.StatusOK)
+	checkHeaders(t, getResp, http.Header{
+		"Docker-Content-Digest": []string{dgst.String()},
+	})
+
+	body, err := io.ReadAll(getResp.Body)
+	if err != nil {
+		t.Fatalf("unexpected error reading sha512 body: %v", err)
+	}
+	if !bytes.Equal(body, payload) {
+		t.Fatalf("unexpected sha512 blob contents: %q != %q", body, payload)
+	}
+}
+
+func TestManifestUploadSupportsSHA512Digest(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+
+	configPayload := []byte(`{"architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}`)
+	configDigest := digest.FromBytes(configPayload)
+	configUploadURL, _ := startPushLayer(t, env, imageName)
+	pushLayer(t, env.builder, imageName, configDigest, configUploadURL, bytes.NewReader(configPayload))
+
+	layerPayload := []byte("oci manifest sha512 layer payload")
+	layerDigest := digest.FromBytes(layerPayload)
+	layerUploadURL, _ := startPushLayer(t, env, imageName)
+	pushLayer(t, env.builder, imageName, layerDigest, layerUploadURL, bytes.NewReader(layerPayload))
+
+	manifest := ocischema.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: v1.MediaTypeImageManifest,
+		Config: v1.Descriptor{
+			MediaType: v1.MediaTypeImageConfig,
+			Digest:    configDigest,
+			Size:      int64(len(configPayload)),
+		},
+		Layers: []v1.Descriptor{{
+			MediaType: v1.MediaTypeImageLayer,
+			Digest:    layerDigest,
+			Size:      int64(len(layerPayload)),
+		}},
+	}
+	deserializedManifest, err := ocischema.FromStruct(manifest)
+	if err != nil {
+		t.Fatalf("could not create OCI manifest: %v", err)
+	}
+	_, payload, err := deserializedManifest.Payload()
+	if err != nil {
+		t.Fatalf("could not get OCI manifest payload: %v", err)
+	}
+	manifestDigest := digest.SHA512.FromBytes(payload)
+	manifestRef, _ := reference.WithDigest(imageName, manifestDigest)
+	manifestURL, err := env.builder.BuildManifestURL(manifestRef)
+	if err != nil {
+		t.Fatalf("error building manifest url: %v", err)
+	}
+
+	resp := putManifest(t, "putting sha512 manifest", manifestURL, v1.MediaTypeImageManifest, deserializedManifest)
+	defer resp.Body.Close()
+	checkResponse(t, "putting sha512 manifest", resp, http.StatusCreated)
+	checkHeaders(t, resp, http.Header{
+		"Location":              []string{manifestURL},
+		"Docker-Content-Digest": []string{manifestDigest.String()},
+	})
+
+	getReq, err := http.NewRequest(http.MethodGet, manifestURL, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating GET manifest request: %v", err)
+	}
+	getReq.Header.Set("Accept", v1.MediaTypeImageManifest)
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("unexpected error getting sha512 manifest: %v", err)
+	}
+	defer getResp.Body.Close()
+
+	checkResponse(t, "getting sha512 manifest", getResp, http.StatusOK)
+	checkHeaders(t, getResp, http.Header{
+		"Docker-Content-Digest": []string{manifestDigest.String()},
+		"Etag":                  []string{fmt.Sprintf(`"%s"`, manifestDigest)},
+	})
+}
+
+func TestManifestUploadSupportsNonDistributableLayersWithExternalURLs(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+
+	configPayload := []byte(`{"architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}`)
+	configDigest := digest.FromBytes(configPayload)
+	configUploadURL, _ := startPushLayer(t, env, imageName)
+	pushLayer(t, env.builder, imageName, configDigest, configUploadURL, bytes.NewReader(configPayload))
+
+	layerPayload := []byte("distributable layer payload")
+	layerDigest := digest.FromBytes(layerPayload)
+	layerUploadURL, _ := startPushLayer(t, env, imageName)
+	pushLayer(t, env.builder, imageName, layerDigest, layerUploadURL, bytes.NewReader(layerPayload))
+
+	manifestPayload := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":%q,"config":{"mediaType":%q,"digest":%q,"size":%d},"layers":[{"mediaType":%q,"digest":%q,"size":123456,"urls":["https://store.example.com/blobs/%s"]},{"mediaType":%q,"digest":%q,"size":12345,"urls":["https://store.example.com/blobs/%s"]},{"mediaType":%q,"digest":%q,"size":%d}]}`,
+		v1.MediaTypeImageManifest,
+		v1.MediaTypeImageConfig, configDigest, len(configPayload),
+		v1.MediaTypeImageLayerNonDistributableGzip, digest.FromBytes([]byte("non-distributable-gzip")), digest.FromBytes([]byte("non-distributable-gzip")).Encoded(),
+		v1.MediaTypeImageLayerNonDistributable, digest.FromBytes([]byte("non-distributable")), digest.FromBytes([]byte("non-distributable")).Encoded(),
+		v1.MediaTypeImageLayer, layerDigest, len(layerPayload),
+	))
+	manifestDigest := digest.FromBytes(manifestPayload)
+	manifestRef, _ := reference.WithDigest(imageName, manifestDigest)
+	manifestURL, err := env.builder.BuildManifestURL(manifestRef)
+	if err != nil {
+		t.Fatalf("error building manifest url: %v", err)
+	}
+
+	resp := putManifestBytes(t, manifestURL, v1.MediaTypeImageManifest, manifestPayload)
+	defer resp.Body.Close()
+
+	checkResponse(t, "putting non-distributable manifest", resp, http.StatusCreated)
+}
+
+func TestReferrersAPIAndSubjectHeader(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+
+	configPayload := []byte(`{"architecture":"amd64","os":"linux","rootfs":{"type":"layers","diff_ids":[]}}`)
+	configDigest := digest.FromBytes(configPayload)
+	configUploadURL, _ := startPushLayer(t, env, imageName)
+	pushLayer(t, env.builder, imageName, configDigest, configUploadURL, bytes.NewReader(configPayload))
+
+	baseManifestPayload := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":%q,"config":{"mediaType":%q,"digest":%q,"size":%d},"layers":[]}`,
+		v1.MediaTypeImageManifest, v1.MediaTypeImageConfig, configDigest, len(configPayload)))
+	baseManifestDigest := digest.FromBytes(baseManifestPayload)
+	baseManifestRef, _ := reference.WithDigest(imageName, baseManifestDigest)
+	baseManifestURL, _ := env.builder.BuildManifestURL(baseManifestRef)
+	baseResp := putManifestBytes(t, baseManifestURL, v1.MediaTypeImageManifest, baseManifestPayload)
+	defer baseResp.Body.Close()
+	checkResponse(t, "putting base manifest", baseResp, http.StatusCreated)
+
+	artifactManifestPayload := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":%q,"artifactType":"application/vnd.example.sbom","config":{"mediaType":%q,"digest":%q,"size":%d},"layers":[],"subject":{"mediaType":%q,"digest":%q,"size":%d}}`,
+		v1.MediaTypeImageManifest, v1.MediaTypeImageConfig, configDigest, len(configPayload), v1.MediaTypeImageManifest, baseManifestDigest, len(baseManifestPayload)))
+	artifactManifestDigest := digest.FromBytes(artifactManifestPayload)
+	artifactManifestRef, _ := reference.WithDigest(imageName, artifactManifestDigest)
+	artifactManifestURL, _ := env.builder.BuildManifestURL(artifactManifestRef)
+	artifactResp := putManifestBytes(t, artifactManifestURL, v1.MediaTypeImageManifest, artifactManifestPayload)
+	defer artifactResp.Body.Close()
+	checkResponse(t, "putting artifact manifest", artifactResp, http.StatusCreated)
+	checkHeaders(t, artifactResp, http.Header{
+		"OCI-Subject": []string{baseManifestDigest.String()},
+	})
+
+	getReq, err := http.NewRequest(http.MethodGet, artifactManifestURL, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating artifact GET request: %v", err)
+	}
+	getReq.Header.Set("Accept", v1.MediaTypeImageManifest)
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("unexpected error getting artifact manifest: %v", err)
+	}
+	defer getResp.Body.Close()
+	checkResponse(t, "getting artifact manifest", getResp, http.StatusOK)
+	checkHeaders(t, getResp, http.Header{
+		"OCI-Subject": []string{baseManifestDigest.String()},
+	})
+
+	referrersURL := fmt.Sprintf("%s/v2/%s/referrers/%s", env.server.URL, imageName.Name(), baseManifestDigest)
+	referrersResp, err := http.Get(referrersURL)
+	if err != nil {
+		t.Fatalf("unexpected error getting referrers: %v", err)
+	}
+	defer referrersResp.Body.Close()
+	checkResponse(t, "getting referrers", referrersResp, http.StatusOK)
+	referrersBody, err := io.ReadAll(referrersResp.Body)
+	if err != nil {
+		t.Fatalf("unexpected error reading referrers body: %v", err)
+	}
+	if !strings.Contains(string(referrersBody), artifactManifestDigest.String()) {
+		t.Fatalf("referrers response missing artifact digest %s: %s", artifactManifestDigest, string(referrersBody))
+	}
+}
+
+func TestEmptyReferrersReturnsEmptyIndex(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/empty")
+	targetDigest := digest.FromString("missing-subject")
+
+	referrersURL := fmt.Sprintf("%s/v2/%s/referrers/%s", env.server.URL, imageName.Name(), targetDigest)
+	referrersResp, err := http.Get(referrersURL)
+	if err != nil {
+		t.Fatalf("unexpected error getting empty referrers: %v", err)
+	}
+	defer referrersResp.Body.Close()
+
+	checkResponse(t, "getting empty referrers", referrersResp, http.StatusOK)
+	checkHeaders(t, referrersResp, http.Header{
+		"Content-Type": []string{v1.MediaTypeImageIndex},
+	})
+
+	body, err := io.ReadAll(referrersResp.Body)
+	if err != nil {
+		t.Fatalf("unexpected error reading empty referrers body: %v", err)
+	}
+
+	var index struct {
+		SchemaVersion int             `json:"schemaVersion"`
+		MediaType     string          `json:"mediaType"`
+		Manifests     []v1.Descriptor `json:"manifests"`
+	}
+	if err := json.Unmarshal(body, &index); err != nil {
+		t.Fatalf("unexpected error unmarshalling empty referrers body: %v\nbody=%s", err, string(body))
+	}
+	if index.SchemaVersion != 2 {
+		t.Fatalf("unexpected schemaVersion in empty referrers response: %d", index.SchemaVersion)
+	}
+	if index.MediaType != v1.MediaTypeImageIndex {
+		t.Fatalf("unexpected mediaType in empty referrers response: %s", index.MediaType)
+	}
+	if len(index.Manifests) != 0 {
+		t.Fatalf("expected no referrers, got %d", len(index.Manifests))
+	}
+}
+
+func TestManifestRequestsWithInvalidDigestReturnDigestErrors(t *testing.T) {
+	env := newTestEnv(t, false)
+	defer env.Shutdown()
+
+	imageName, _ := reference.WithName("foo/bar")
+	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", env.server.URL, imageName.Name(), "sha256:invalid")
+
+	getReq, err := http.NewRequest(http.MethodGet, manifestURL, nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating invalid digest GET request: %v", err)
+	}
+	getReq.Header.Set("Accept", v1.MediaTypeImageManifest)
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("unexpected error doing invalid digest GET request: %v", err)
+	}
+	defer getResp.Body.Close()
+	checkResponse(t, "getting manifest with invalid digest", getResp, http.StatusBadRequest)
+	checkBodyHasErrorCodes(t, "getting manifest with invalid digest", getResp, errcode.ErrorCodeDigestInvalid)
+
+	putResp := putManifestBytes(t, manifestURL, v1.MediaTypeImageManifest, []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","size":2},"layers":[]}`))
+	defer putResp.Body.Close()
+	checkResponse(t, "putting manifest with invalid digest", putResp, http.StatusBadRequest)
+	checkBodyHasErrorCodes(t, "putting manifest with invalid digest", putResp, errcode.ErrorCodeDigestInvalid)
 }
 
 func testBlobAPI(t *testing.T, env *testEnv, args blobArgs) *testEnv {
@@ -2414,6 +2758,25 @@ func putManifest(t *testing.T, msg, url, contentType string, v any) *http.Respon
 	return resp
 }
 
+func putManifestBytes(t *testing.T, url, contentType string, body []byte) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("error creating request for raw manifest put: %v", err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("error doing raw manifest put request: %v", err)
+	}
+
+	return resp
+}
+
 func startPushLayer(t *testing.T, env *testEnv, name reference.Named) (location string, uuid string) {
 	layerUploadURL, err := env.builder.BuildBlobUploadURL(name)
 	if err != nil {
@@ -2586,6 +2949,31 @@ func doPushChunk(t *testing.T, uploadURLBase string, body io.Reader, options chu
 	resp, err := http.DefaultClient.Do(req)
 
 	return resp, err
+}
+
+func doCompleteChunk(t *testing.T, uploadURLBase string, dgst digest.Digest, body io.Reader, options chunkOptions) (*http.Response, error) {
+	t.Helper()
+
+	u, err := url.Parse(uploadURLBase)
+	if err != nil {
+		t.Fatalf("unexpected error parsing complete chunk url: %v", err)
+	}
+
+	u.RawQuery = url.Values{
+		"_state": u.Query()["_state"],
+		"digest": []string{dgst.String()},
+	}.Encode()
+
+	req, err := http.NewRequest(http.MethodPut, u.String(), body)
+	if err != nil {
+		t.Fatalf("unexpected error creating complete chunk request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if options.contentRange != "" {
+		req.Header.Set("Content-Range", options.contentRange)
+	}
+
+	return http.DefaultClient.Do(req)
 }
 
 func pushChunk(t *testing.T, ub *v2.URLBuilder, name reference.Named, uploadURLBase string, body io.Reader, length int64) (string, digest.Digest) {
