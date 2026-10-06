@@ -21,7 +21,7 @@ type ManifestHandler interface {
 	Unmarshal(ctx context.Context, dgst digest.Digest, content []byte) (distribution.Manifest, error)
 
 	// Put creates or updates the given manifest returning the manifest digest.
-	Put(ctx context.Context, manifest distribution.Manifest, skipDependencyVerification bool) (digest.Digest, error)
+	Put(ctx context.Context, manifest distribution.Manifest, skipDependencyVerification bool, expectedDigest digest.Digest) (digest.Digest, error)
 }
 
 // SkipLayerVerification allows a manifest to be Put before its
@@ -134,15 +134,22 @@ func (ms *manifestStore) Get(ctx context.Context, dgst digest.Digest, options ..
 func (ms *manifestStore) Put(ctx context.Context, manifest distribution.Manifest, options ...distribution.ManifestServiceOption) (digest.Digest, error) {
 	dcontext.GetLogger(ms.ctx).Debug("(*manifestStore).Put")
 
+	var expectedDigest digest.Digest
+	for _, option := range options {
+		if opt, ok := option.(distribution.WithManifestDigestOption); ok {
+			expectedDigest = opt.Digest
+		}
+	}
+
 	switch manifest.(type) {
 	case *schema2.DeserializedManifest:
-		return ms.schema2Handler.Put(ctx, manifest, ms.skipDependencyVerification)
+		return ms.schema2Handler.Put(ctx, manifest, ms.skipDependencyVerification, expectedDigest)
 	case *ocischema.DeserializedManifest:
-		return ms.ocischemaHandler.Put(ctx, manifest, ms.skipDependencyVerification)
+		return ms.ocischemaHandler.Put(ctx, manifest, ms.skipDependencyVerification, expectedDigest)
 	case *manifestlist.DeserializedManifestList:
-		return ms.manifestListHandler.Put(ctx, manifest, ms.skipDependencyVerification)
+		return ms.manifestListHandler.Put(ctx, manifest, ms.skipDependencyVerification, expectedDigest)
 	case *ocischema.DeserializedImageIndex:
-		return ms.ocischemaIndexHandler.Put(ctx, manifest, ms.skipDependencyVerification)
+		return ms.ocischemaIndexHandler.Put(ctx, manifest, ms.skipDependencyVerification, expectedDigest)
 	}
 
 	return "", fmt.Errorf("unrecognized manifest type %T", manifest)

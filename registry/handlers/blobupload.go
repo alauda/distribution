@@ -142,28 +142,9 @@ func (buh *blobUploadHandler) PatchBlobData(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	cr := r.Header.Get("Content-Range")
-	cl := r.Header.Get("Content-Length")
-	if cr != "" && cl != "" {
-		start, end, err := parseContentRange(cr)
-		if err != nil {
-			buh.Errors = append(buh.Errors, errcode.ErrorCodeUnknown.WithDetail(err.Error()))
-			return
-		}
-		if start > end || start != buh.Upload.Size() {
-			buh.Errors = append(buh.Errors, errcode.ErrorCodeRangeInvalid)
-			return
-		}
-
-		clInt, err := strconv.ParseInt(cl, 10, 64)
-		if err != nil {
-			buh.Errors = append(buh.Errors, errcode.ErrorCodeUnknown.WithDetail(err.Error()))
-			return
-		}
-		if clInt != (end-start)+1 {
-			buh.Errors = append(buh.Errors, errcode.ErrorCodeSizeInvalid)
-			return
-		}
+	if err := buh.validateUploadChunkRange(r); err != nil {
+		buh.Errors = append(buh.Errors, err)
+		return
 	}
 
 	if err := copyFullPayload(buh, w, r, buh.Upload, -1, "blob PATCH"); err != nil {
@@ -203,6 +184,11 @@ func (buh *blobUploadHandler) PutBlobUploadComplete(w http.ResponseWriter, r *ht
 	if err != nil {
 		// no digest? return error, but allow retry.
 		buh.Errors = append(buh.Errors, errcode.ErrorCodeDigestInvalid.WithDetail("digest parsing failed"))
+		return
+	}
+
+	if err := buh.validateUploadChunkRange(r); err != nil {
+		buh.Errors = append(buh.Errors, err)
 		return
 	}
 
@@ -251,6 +237,32 @@ func (buh *blobUploadHandler) PutBlobUploadComplete(w http.ResponseWriter, r *ht
 		buh.Errors = append(buh.Errors, errcode.ErrorCodeUnknown.WithDetail(err))
 		return
 	}
+}
+
+func (buh *blobUploadHandler) validateUploadChunkRange(r *http.Request) error {
+	cr := r.Header.Get("Content-Range")
+	cl := r.Header.Get("Content-Length")
+	if cr == "" || cl == "" {
+		return nil
+	}
+
+	start, end, err := parseContentRange(cr)
+	if err != nil {
+		return errcode.ErrorCodeUnknown.WithDetail(err.Error())
+	}
+	if start > end || start != buh.Upload.Size() {
+		return errcode.ErrorCodeRangeInvalid
+	}
+
+	clInt, err := strconv.ParseInt(cl, 10, 64)
+	if err != nil {
+		return errcode.ErrorCodeUnknown.WithDetail(err.Error())
+	}
+	if clInt != (end-start)+1 {
+		return errcode.ErrorCodeSizeInvalid
+	}
+
+	return nil
 }
 
 // CancelBlobUpload cancels an in-progress upload of a blob.

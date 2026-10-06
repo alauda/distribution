@@ -51,6 +51,11 @@ func manifestDispatcher(ctx *Context, r *http.Request) http.Handler {
 	ref := getReference(ctx)
 	dgst, err := digest.Parse(ref)
 	if err != nil {
+		if strings.Contains(ref, ":") {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx.Errors = append(ctx.Errors, errcode.ErrorCodeDigestInvalid.WithDetail(err))
+			})
+		}
 		// We just have a tag
 		manifestHandler.Tag = ref
 	} else {
@@ -218,6 +223,16 @@ func (imh *manifestHandler) GetManifest(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Length", fmt.Sprint(len(p)))
 	w.Header().Set("Docker-Content-Digest", imh.Digest.String())
 	w.Header().Set("Etag", fmt.Sprintf(`"%s"`, imh.Digest))
+	switch m := manifest.(type) {
+	case *ocischema.DeserializedManifest:
+		if m.Subject != nil {
+			w.Header().Set("OCI-Subject", m.Subject.Digest.String())
+		}
+	case *ocischema.DeserializedImageIndex:
+		if m.Subject != nil {
+			w.Header().Set("OCI-Subject", m.Subject.Digest.String())
+		}
+	}
 
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
@@ -263,9 +278,13 @@ func (imh *manifestHandler) PutManifest(w http.ResponseWriter, r *http.Request) 
 
 	if imh.Digest != "" {
 		if desc.Digest != imh.Digest {
-			dcontext.GetLogger(imh).Errorf("payload digest does not match: %q != %q", desc.Digest, imh.Digest)
-			imh.Errors = append(imh.Errors, errcode.ErrorCodeDigestInvalid)
-			return
+			verifier := imh.Digest.Verifier()
+			if _, err := verifier.Write(jsonBuf.Bytes()); err != nil || !verifier.Verified() {
+				dcontext.GetLogger(imh).Errorf("payload digest does not match: %q != %q", desc.Digest, imh.Digest)
+				imh.Errors = append(imh.Errors, errcode.ErrorCodeDigestInvalid)
+				return
+			}
+			desc.Digest = imh.Digest
 		}
 	} else if imh.Tag != "" {
 		imh.Digest = desc.Digest
@@ -285,6 +304,9 @@ func (imh *manifestHandler) PutManifest(w http.ResponseWriter, r *http.Request) 
 	var options []distribution.ManifestServiceOption
 	if imh.Tag != "" {
 		options = append(options, distribution.WithTag(imh.Tag))
+	}
+	if imh.Digest != "" {
+		options = append(options, distribution.WithManifestDigest(imh.Digest))
 	}
 
 	if err := imh.applyResourcePolicy(manifest); err != nil {
@@ -358,6 +380,16 @@ func (imh *manifestHandler) PutManifest(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Location", location)
 	w.Header().Set("Docker-Content-Digest", imh.Digest.String())
+	switch m := manifest.(type) {
+	case *ocischema.DeserializedManifest:
+		if m.Subject != nil {
+			w.Header().Set("OCI-Subject", m.Subject.Digest.String())
+		}
+	case *ocischema.DeserializedImageIndex:
+		if m.Subject != nil {
+			w.Header().Set("OCI-Subject", m.Subject.Digest.String())
+		}
+	}
 	w.WriteHeader(http.StatusCreated)
 
 	dcontext.GetLogger(imh).Debug("Succeeded in putting manifest!")

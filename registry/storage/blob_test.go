@@ -512,6 +512,100 @@ func TestBlobMount(t *testing.T) {
 	}
 }
 
+func TestBlobMountWithSHA512Alias(t *testing.T) {
+	randomDataReader, canonicalDigest, err := testutil.CreateRandomTarFile()
+	if err != nil {
+		t.Fatalf("error creating random reader: %v", err)
+	}
+
+	randomData, err := io.ReadAll(randomDataReader)
+	if err != nil {
+		t.Fatalf("error reading random data: %v", err)
+	}
+
+	aliasDigest := digest.SHA512.FromBytes(randomData)
+
+	ctx := context.Background()
+	imageName, _ := reference.WithName("foo/bar")
+	sourceImageName, _ := reference.WithName("foo/source")
+	driver := inmemory.New()
+	registry, err := NewRegistry(ctx, driver, BlobDescriptorCacheProvider(memory.NewInMemoryBlobDescriptorCacheProvider(memory.UnlimitedSize)), EnableDelete, EnableRedirect)
+	if err != nil {
+		t.Fatalf("error creating registry: %v", err)
+	}
+
+	repository, err := registry.Repository(ctx, imageName)
+	if err != nil {
+		t.Fatalf("unexpected error getting repo: %v", err)
+	}
+	sourceRepository, err := registry.Repository(ctx, sourceImageName)
+	if err != nil {
+		t.Fatalf("unexpected error getting source repo: %v", err)
+	}
+
+	sourceBlobs := sourceRepository.Blobs(ctx)
+	blobUpload, err := sourceBlobs.Create(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error starting layer upload: %v", err)
+	}
+
+	if _, err := io.Copy(blobUpload, bytes.NewReader(randomData)); err != nil {
+		t.Fatalf("unexpected error uploading layer data: %v", err)
+	}
+
+	desc, err := blobUpload.Commit(ctx, v1.Descriptor{Digest: aliasDigest})
+	if err != nil {
+		t.Fatalf("unexpected error finishing layer upload: %v", err)
+	}
+
+	if desc.Digest != aliasDigest {
+		t.Fatalf("unexpected mounted digest: %v != %v", desc.Digest, aliasDigest)
+	}
+
+	canonicalPath, err := pathFor(blobDataPathSpec{digest: canonicalDigest})
+	if err != nil {
+		t.Fatalf("unexpected error building canonical path: %v", err)
+	}
+	if _, err := driver.Stat(ctx, canonicalPath); err != nil {
+		t.Fatalf("expected canonical blob content to exist at %q: %v", canonicalPath, err)
+	}
+
+	bs := repository.Blobs(ctx)
+	aliasRef, err := reference.WithDigest(sourceRepository.Named(), aliasDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bw, err := bs.Create(ctx, WithMountFrom(aliasRef))
+	if bw != nil {
+		t.Fatal("unexpected blobwriter returned from Create call, should mount instead")
+	}
+
+	ebm, ok := err.(distribution.ErrBlobMounted)
+	if !ok {
+		t.Fatalf("unexpected error mounting layer: %v", err)
+	}
+
+	if ebm.Descriptor.Digest != aliasDigest {
+		t.Fatalf("unexpected mounted descriptor digest: %v != %v", ebm.Descriptor.Digest, aliasDigest)
+	}
+
+	rc, err := bs.Open(ctx, aliasDigest)
+	if err != nil {
+		t.Fatalf("unexpected error opening mounted sha512 blob: %v", err)
+	}
+	defer rc.Close()
+
+	body, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("unexpected error reading mounted sha512 blob: %v", err)
+	}
+
+	if !bytes.Equal(body, randomData) {
+		t.Fatal("mounted sha512 blob data not equal")
+	}
+}
+
 // TestLayerUploadZeroLength uploads zero-length
 func TestLayerUploadZeroLength(t *testing.T) {
 	ctx := context.Background()

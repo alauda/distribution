@@ -33,7 +33,7 @@ func (ms *manifestListHandler) Unmarshal(ctx context.Context, dgst digest.Digest
 	return m, nil
 }
 
-func (ms *manifestListHandler) Put(ctx context.Context, manifestList distribution.Manifest, skipDependencyVerification bool) (digest.Digest, error) {
+func (ms *manifestListHandler) Put(ctx context.Context, manifestList distribution.Manifest, skipDependencyVerification bool, expectedDigest digest.Digest) (digest.Digest, error) {
 	dcontext.GetLogger(ms.ctx).Debug("(*manifestListHandler).Put")
 
 	var schemaVersion int
@@ -64,6 +64,13 @@ func (ms *manifestListHandler) Put(ctx context.Context, manifestList distributio
 	if err != nil {
 		dcontext.GetLogger(ctx).Errorf("error putting payload into blobstore: %v", err)
 		return "", err
+	}
+
+	if expectedDigest != "" && expectedDigest != revision.Digest {
+		if err := ms.blobStore.(*linkedBlobStore).linkBlob(ctx, revision, expectedDigest); err != nil {
+			return "", err
+		}
+		return expectedDigest, nil
 	}
 
 	return revision.Digest, nil

@@ -1,0 +1,1020 @@
+# OCI Conformance Case 检查项清单
+
+## 1. 说明
+
+- 来源结果：`tests/oci-conformance-results-local-source/junit.xml`
+- 目标实例：本地源码版 registry（`tests/conf-local-oci-conformance.yml`）
+- 本文用途：单独罗列 `OCI conformance` 包含的 case、分组和近全量叶子检查项，便于下次排查和复验
+- 说明：本文只保留 case 树、状态和必要的 skip 原因；不展开每次 HTTP 请求/响应明细
+
+## 2. 最终结果总览
+
+- 总检查项：`687`
+- 通过：`679`
+- 跳过：`8`
+- 禁用：`0`
+- 最终结论：`OCI Conformance Test: Pass`
+
+## 3. 跳过项说明
+
+- 本次 `8` 个跳过项都不是失败，而是 runner 根据当前 registry 能力或配置自动走 fallback / disabled 分支
+- `blob-post-only`
+  - 含义：registry 不支持“POST 请求直接携带 blob 内容并完成上传”这一快捷路径
+  - runner 行为：自动回退到更通用的 `POST -> PUT` 上传流程
+  - 结论：属于能力差异，不算失败
+- `blob-mount-anonymous`
+  - 含义：registry 没有对 anonymous mount 返回直接 `201 mounted`，而是返回 `202` 进入普通上传流程
+  - runner 行为：自动回退到 `blob POST+PUT`
+  - 结论：属于能力差异，不算失败
+- `blob-post-cancel`
+  - 含义：当前配置里关闭了 `Blob upload cancel`
+  - runner 行为：将该检查项标记为 skipped
+  - 结论：属于配置关闭，不算失败
+
+## 4. Case 导航
+
+- 基础 API
+  - [`ping`](#ping)
+  - [`empty`](#empty)
+- Blob 能力
+  - [`sha256 blobs`](#sha256-blobs)
+  - [`sha512 blobs`](#sha512-blobs)
+- 镜像 / Manifest 能力
+  - [`image`](#image)
+  - [`image-uncompressed`](#image-uncompressed)
+  - [`large-manifest`](#large-manifest)
+  - [`non-distributable-layers`](#non-distributable-layers)
+  - [`no-layers`](#no-layers)
+  - [`data-field`](#data-field)
+  - [`custom-fields`](#custom-fields)
+- Index / Artifact / Subject 能力
+  - [`index`](#index)
+  - [`nested-index`](#nested-index)
+  - [`empty-index`](#empty-index)
+  - [`artifact`](#artifact)
+  - [`artifact-index`](#artifact-index)
+  - [`artifact-without-layers`](#artifact-without-layers)
+  - [`artifacts-with-subject`](#artifacts-with-subject)
+  - [`index-with-subject`](#index-with-subject)
+  - [`missing-subject`](#missing-subject)
+- Digest / 边界条件
+  - [`sha512`](#sha512)
+  - [`bad-digest-image`](#bad-digest-image)
+  - [`missing-manifest`](#missing-manifest)
+  - [`invalid-digest-format`](#invalid-digest-format)
+
+## 5. 一级 Case 列表
+
+- `ping`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+- `empty`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+- `sha256 blobs`：`68` 项（通过 `64` / 跳过 `4` / 禁用 `0`）
+- `sha512 blobs`：`68` 项（通过 `64` / 跳过 `4` / 禁用 `0`）
+- `image`：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `image-uncompressed`：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `large-manifest`：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `index`：`41` 项（通过 `41` / 跳过 `0` / 禁用 `0`）
+- `nested-index`：`73` 项（通过 `73` / 跳过 `0` / 禁用 `0`）
+- `empty-index`：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+- `artifact`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+- `artifact-index`：`29` 项（通过 `29` / 跳过 `0` / 禁用 `0`）
+- `artifact-without-layers`：`13` 项（通过 `13` / 跳过 `0` / 禁用 `0`）
+- `artifacts-with-subject`：`62` 项（通过 `62` / 跳过 `0` / 禁用 `0`）
+- `index-with-subject`：`70` 项（通过 `70` / 跳过 `0` / 禁用 `0`）
+- `missing-subject`：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+- `data-field`：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `non-distributable-layers`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+- `custom-fields`：`41` 项（通过 `41` / 跳过 `0` / 禁用 `0`）
+- `no-layers`：`13` 项（通过 `13` / 跳过 `0` / 禁用 `0`）
+- `sha512`：`37` 项（通过 `37` / 跳过 `0` / 禁用 `0`）
+- `bad-digest-image`：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+- `missing-manifest`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+- `invalid-digest-format`：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+
+## 6. Case 明细（近全量展开）
+
+### ping
+
+- 小计：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+- 根项：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `ping`
+
+### empty
+
+- 小计：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+- `tag list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag list`
+- `referrers`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `referrers`
+
+### sha256 blobs
+
+- 小计：`68` 项（通过 `64` / 跳过 `4` / 禁用 `0`）
+- `get-missing`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `get-missing`
+- `post only`：`2` 项（通过 `1` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-only` - registry 不支持 POST 直接带内容完成上传，runner 已自动回退到 `POST -> PUT` 流程；这不是失败
+  - [通过] `blob-delete`
+- `post+put`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked single`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `stream`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-stream`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `mount`：`6` 项（通过 `6` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-mount`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+- `mount anonymous`：`4` 项（通过 `3` / 跳过 `1` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [跳过] `blob-mount-anonymous` - registry 对 anonymous mount 返回 `202` 而不是直接 mounted，runner 已自动回退到 `blob POST+PUT`；这不是失败
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+- `mount missing`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-mount`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `post cancel`：`2` 项（通过 `1` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-cancel` - 当前配置中 `Blob upload cancel` 被禁用，因此该检查项按配置跳过；这不是失败
+  - [通过] `blob-delete`
+- `chunked multi`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked multi and put chunk`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked out-of-order`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked out-of-order and put chunk`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `range requests`：`8` 项（通过 `8` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `range 500-1499`
+  - [通过] `range 500-`
+  - [通过] `range -500`
+  - [通过] `range 2000-5000`
+  - [通过] `range 500-0`
+  - [通过] `range 5000-10000`
+  - [通过] `blob-delete`
+- `empty`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `emptyJSON`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `bad digest post only`：`1` 项（通过 `0` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-only` - registry 不支持 POST 直接带内容完成上传，runner 已自动回退到 `POST -> PUT` 流程；这不是失败
+- `bad digest post+put`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+- `bad digest chunked`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+- `bad digest chunked and put chunk`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+- `bad digest stream`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-stream`
+
+### sha512 blobs
+
+- 小计：`68` 项（通过 `64` / 跳过 `4` / 禁用 `0`）
+- `get-missing`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `get-missing`
+- `post only`：`2` 项（通过 `1` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-only` - registry 不支持 POST 直接带内容完成上传，runner 已自动回退到 `POST -> PUT` 流程；这不是失败
+  - [通过] `blob-delete`
+- `post+put`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked single`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `stream`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-stream`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `mount`：`6` 项（通过 `6` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-mount`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+- `mount anonymous`：`4` 项（通过 `3` / 跳过 `1` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [跳过] `blob-mount-anonymous` - registry 对 anonymous mount 返回 `202` 而不是直接 mounted，runner 已自动回退到 `blob POST+PUT`；这不是失败
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+- `mount missing`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-mount`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `post cancel`：`2` 项（通过 `1` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-cancel` - 当前配置中 `Blob upload cancel` 被禁用，因此该检查项按配置跳过；这不是失败
+  - [通过] `blob-delete`
+- `chunked multi`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked multi and put chunk`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked out-of-order`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `chunked out-of-order and put chunk`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `range requests`：`8` 项（通过 `8` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `range 500-1499`
+  - [通过] `range 500-`
+  - [通过] `range -500`
+  - [通过] `range 2000-5000`
+  - [通过] `range 500-0`
+  - [通过] `range 5000-10000`
+  - [通过] `blob-delete`
+- `empty`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `emptyJSON`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-head`
+  - [通过] `blob-get`
+  - [通过] `blob-delete`
+- `bad digest post only`：`1` 项（通过 `0` / 跳过 `1` / 禁用 `0`）
+  - [跳过] `blob-post-only` - registry 不支持 POST 直接带内容完成上传，runner 已自动回退到 `POST -> PUT` 流程；这不是失败
+- `bad digest post+put`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+- `bad digest chunked`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+- `bad digest chunked and put chunk`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-chunked`
+- `bad digest stream`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-patch-stream`
+
+### image
+
+- 小计：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `push`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### image-uncompressed
+
+- 小计：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `push`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### large-manifest
+
+- 小计：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `push`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### index
+
+- 小计：`41` 项（通过 `41` / 跳过 `0` / 禁用 `0`）
+- `push`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### nested-index
+
+- 小计：`73` 项（通过 `73` / 跳过 `0` / 禁用 `0`）
+- `push`：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### empty-index
+
+- 小计：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+- `push`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+- `pull`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+- `delete`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+
+### artifact
+
+- 小计：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+- `push`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### artifact-index
+
+- 小计：`29` 项（通过 `29` / 跳过 `0` / 禁用 `0`）
+- `push`：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### artifact-without-layers
+
+- 小计：`13` 项（通过 `13` / 跳过 `0` / 禁用 `0`）
+- `push`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+- `pull`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+- `delete`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+
+### artifacts-with-subject
+
+- 小计：`62` 项（通过 `62` / 跳过 `0` / 禁用 `0`）
+- `push`：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `referrers`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `referrers`
+- `delete`：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `tag-delete`
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### index-with-subject
+
+- 小计：`70` 项（通过 `70` / 跳过 `0` / 禁用 `0`）
+- `push`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `referrers`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `referrers`
+- `delete`：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### missing-subject
+
+- 小计：`18` 项（通过 `18` / 跳过 `0` / 禁用 `0`）
+- `push`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `referrers`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `referrers`
+- `delete`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### data-field
+
+- 小计：`21` 项（通过 `21` / 跳过 `0` / 禁用 `0`）
+- `push`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`5` 项（通过 `5` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### non-distributable-layers
+
+- 小计：`17` 项（通过 `17` / 跳过 `0` / 禁用 `0`）
+- `push`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### custom-fields
+
+- 小计：`41` 项（通过 `41` / 跳过 `0` / 禁用 `0`）
+- `push`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`10` 项（通过 `10` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### no-layers
+
+- 小计：`13` 项（通过 `13` / 跳过 `0` / 禁用 `0`）
+- `push`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-tag`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-tag`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+- `pull`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-tag`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+- `delete`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+
+### sha512
+
+- 小计：`37` 项（通过 `37` / 跳过 `0` / 禁用 `0`）
+- `push`：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `manifest-head-by-digest`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `manifest-by-digest`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`9` 项（通过 `9` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### bad-digest-image
+
+- 小计：`15` 项（通过 `15` / 跳过 `0` / 禁用 `0`）
+- `push`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+  - [通过] `manifest-by-digest`
+- `tag-list`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `tag-list`
+- `head`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+  - [通过] `blob-head`
+- `pull`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+  - [通过] `blob-get`
+- `delete`：`4` 项（通过 `4` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`
+
+### missing-manifest
+
+- 小计：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+- `by-digest`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `by-digest`
+- `by-tag`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `by-tag`
+
+### invalid-digest-format
+
+- 小计：`7` 项（通过 `7` / 跳过 `0` / 禁用 `0`）
+- `blob-post-put`：`2` 项（通过 `2` / 跳过 `0` / 禁用 `0`）
+  - [通过] `blob-post-put`
+  - [通过] `blob-post-put`
+- `manifest-put`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-put`
+- `manifest-get`：`1` 项（通过 `1` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-get`
+- `delete`：`3` 项（通过 `3` / 跳过 `0` / 禁用 `0`）
+  - [通过] `manifest-delete`
+  - [通过] `blob-delete`
+  - [通过] `blob-delete`

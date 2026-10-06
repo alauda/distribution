@@ -33,7 +33,7 @@ func (ms *ocischemaManifestHandler) Unmarshal(ctx context.Context, dgst digest.D
 	return m, nil
 }
 
-func (ms *ocischemaManifestHandler) Put(ctx context.Context, manifest distribution.Manifest, skipDependencyVerification bool) (digest.Digest, error) {
+func (ms *ocischemaManifestHandler) Put(ctx context.Context, manifest distribution.Manifest, skipDependencyVerification bool, expectedDigest digest.Digest) (digest.Digest, error) {
 	dcontext.GetLogger(ms.ctx).Debug("(*ocischemaManifestHandler).Put")
 
 	m, ok := manifest.(*ocischema.DeserializedManifest)
@@ -54,6 +54,13 @@ func (ms *ocischemaManifestHandler) Put(ctx context.Context, manifest distributi
 	if err != nil {
 		dcontext.GetLogger(ctx).Errorf("error putting payload into blobstore: %v", err)
 		return "", err
+	}
+
+	if expectedDigest != "" && expectedDigest != revision.Digest {
+		if err := ms.blobStore.(*linkedBlobStore).linkBlob(ctx, revision, expectedDigest); err != nil {
+			return "", err
+		}
+		return expectedDigest, nil
 	}
 
 	return revision.Digest, nil
@@ -88,7 +95,7 @@ func (ms *ocischemaManifestHandler) verifyManifest(ctx context.Context, mnfst oc
 		}
 
 		switch descriptor.MediaType {
-		case v1.MediaTypeImageLayer, v1.MediaTypeImageLayerGzip, v1.MediaTypeImageLayerNonDistributable, v1.MediaTypeImageLayerNonDistributableGzip: //nolint:staticcheck // ignore A1019: v1.MediaTypeImageLayerNonDistributable is deprecated: Non-distributable layers are deprecated, and not recommended for future use.
+		case v1.MediaTypeImageLayer, v1.MediaTypeImageLayerGzip, v1.MediaTypeImageLayerZstd, v1.MediaTypeImageLayerNonDistributable, v1.MediaTypeImageLayerNonDistributableGzip, v1.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore A1019: v1.MediaTypeImageLayerNonDistributable is deprecated: Non-distributable layers are deprecated, and not recommended for future use.
 			allow := ms.manifestURLs.allow
 			deny := ms.manifestURLs.deny
 			for _, u := range descriptor.URLs {
@@ -103,7 +110,7 @@ func (ms *ocischemaManifestHandler) verifyManifest(ctx context.Context, mnfst oc
 				// check the presence if it is normal layer or
 				// there is no urls for non-distributable
 				if len(descriptor.URLs) == 0 ||
-					(descriptor.MediaType == v1.MediaTypeImageLayer || descriptor.MediaType == v1.MediaTypeImageLayerGzip) {
+					(descriptor.MediaType == v1.MediaTypeImageLayer || descriptor.MediaType == v1.MediaTypeImageLayerGzip || descriptor.MediaType == v1.MediaTypeImageLayerZstd) {
 
 					_, err = blobsService.Stat(ctx, descriptor.Digest)
 				}

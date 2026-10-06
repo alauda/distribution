@@ -93,6 +93,15 @@ type manifestServiceListener struct {
 	parent *repositoryListener
 }
 
+func (msl *manifestServiceListener) Enumerate(ctx context.Context, ingester func(digest.Digest) error) error {
+	enumerator, ok := msl.ManifestService.(distribution.ManifestEnumerator)
+	if !ok {
+		return distribution.ErrUnsupported
+	}
+
+	return enumerator.Enumerate(ctx, ingester)
+}
+
 func (msl *manifestServiceListener) Delete(ctx context.Context, dgst digest.Digest) error {
 	err := msl.ManifestService.Delete(ctx, dgst)
 	if err == nil {

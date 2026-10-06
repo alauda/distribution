@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/distribution/reference"
+	"github.com/opencontainers/go-digest"
 )
 
 // Scope defines the set of items that match a namespace.
@@ -69,11 +70,25 @@ func WithTag(tag string) ManifestServiceOption {
 	return WithTagOption{tag}
 }
 
+// WithManifestDigest allows a manifest PUT by digest to preserve the requested digest.
+func WithManifestDigest(dgst digest.Digest) ManifestServiceOption {
+	return WithManifestDigestOption{Digest: dgst}
+}
+
 // WithTagOption holds a tag
 type WithTagOption struct{ Tag string }
 
+// WithManifestDigestOption holds a requested manifest digest.
+type WithManifestDigestOption struct{ Digest digest.Digest }
+
 // Apply conforms to the ManifestServiceOption interface
 func (o WithTagOption) Apply(m ManifestService) error {
+	// no implementation
+	return nil
+}
+
+// Apply conforms to the ManifestServiceOption interface.
+func (o WithManifestDigestOption) Apply(m ManifestService) error {
 	// no implementation
 	return nil
 }

@@ -1,0 +1,1 @@
+{"author":"OCI Conformance Test","architecture":"amd64","os":"linux","config":{},"rootfs":{"type":"layers","diff_ids":["sha256:975266e4e06672ffde31f18d1337d63f222d096e5063c34e821bd76bf23c5071","sha256:2ef33f890249d5d82563d3053cb98b6c997074c71274bac8afa19de7b47e8a11","sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]}}

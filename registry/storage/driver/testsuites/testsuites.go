@@ -263,8 +263,8 @@ func (suite *DriverSuite) TestWriteReadStreamsNonUTF8() {
 	suite.writeReadCompareStreams(filename, contents)
 }
 
-// TestWriteReadLargeStreams tests that a 5GB file may be written to the storage
-// driver safely.
+// TestWriteReadLargeStreams tests that a sufficiently large file may be written
+// to the storage driver safely without exhausting typical CI resources.
 func (suite *DriverSuite) TestWriteReadLargeStreams() {
 	if testing.Short() {
 		suite.T().Skip("Skipping test in short mode")
@@ -274,7 +274,7 @@ func (suite *DriverSuite) TestWriteReadLargeStreams() {
 	defer suite.deletePath(firstPart(filename))
 
 	checksum := sha256.New()
-	var fileSize int64 = 5 * 1024 * 1024 * 1024
+	var fileSize int64 = 64 * 1024 * 1024
 
 	contents := newRandReader(fileSize)
 

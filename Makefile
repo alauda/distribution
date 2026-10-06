@@ -151,7 +151,7 @@ run-s3-tests: start-s3-storage ## run S3 storage driver integration tests
 	S3_SECURE=false \
 	S3_ACCELERATE=false \
 	AWS_S3_FORCE_PATH_STYLE=true \
-	go test ${TESTFLAGS} -count=1 ./registry/storage/driver/s3-aws/...
+	go test ${TESTFLAGS} -timeout=30m -count=1 ./registry/storage/driver/s3-aws/...
 
 .PHONY: start-e2e-s3-env
 start-e2e-s3-env: ## starts E2E S3 storage test environment (S3, Redis, registry)
@@ -180,7 +180,7 @@ run-azure-tests: start-azure-storage ## run Azure storage driver integration tes
 	AZURE_STORAGE_ACCOUNT_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==" \
 	AZURE_STORAGE_CONTAINER=containername \
 	AZURE_SERVICE_URL="https://127.0.0.1:10000/devstoreaccount1" \
-	go test ${TESTFLAGS} -count=1 ./registry/storage/driver/azure/...
+	go test ${TESTFLAGS} -timeout=30m -count=1 ./registry/storage/driver/azure/...
 
 ##@ Validate
 

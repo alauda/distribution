@@ -107,6 +107,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 		return http.HandlerFunc(apiBase)
 	})
 	app.register(v2.RouteNameManifest, manifestDispatcher)
+	app.register(v2.RouteNameReferrers, referrersDispatcher)
 	app.register(v2.RouteNameCatalog, catalogDispatcher)
 	app.register(v2.RouteNameTags, tagsDispatcher)
 	app.register(v2.RouteNameBlob, blobDispatcher)
@@ -232,10 +233,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 
 	// configure validation
 	if config.Validation.Enabled {
-		if len(config.Validation.Manifests.URLs.Allow) == 0 && len(config.Validation.Manifests.URLs.Deny) == 0 {
-			// If Allow and Deny are empty, allow nothing.
-			options = append(options, storage.ManifestURLsAllowRegexp(regexp.MustCompile("^$")))
-		} else {
+		if len(config.Validation.Manifests.URLs.Allow) > 0 || len(config.Validation.Manifests.URLs.Deny) > 0 {
 			if len(config.Validation.Manifests.URLs.Allow) > 0 {
 				for i, s := range config.Validation.Manifests.URLs.Allow {
 					// Validate via compilation.
