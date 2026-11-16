@@ -364,6 +364,23 @@ func (suite *ConfigSuite) TestParseWithDifferentEnvLoglevel() {
 	suite.Require().Equal(suite.expectedConfig, config)
 }
 
+// TestParseAlaudaLoglevels validates the Alauda-supported fatal and panic log levels.
+func (suite *ConfigSuite) TestParseAlaudaLoglevels() {
+	panicConfigYaml := strings.Replace(configYamlV0_1, "level: info", "level: panic", 1)
+	suite.expectedConfig.Log.Level = "panic"
+
+	config, err := Parse(bytes.NewReader([]byte(panicConfigYaml)))
+	suite.Require().NoError(err)
+	suite.Require().Equal(suite.expectedConfig, config)
+
+	suite.expectedConfig.Log.Level = "fatal"
+	suite.T().Setenv("REGISTRY_LOG_LEVEL", "fatal")
+
+	config, err = Parse(bytes.NewReader([]byte(configYamlV0_1)))
+	suite.Require().NoError(err)
+	suite.Require().Equal(suite.expectedConfig, config)
+}
+
 // TestParseInvalidLoglevel validates that the parser will fail to parse a
 // configuration if the loglevel is malformed
 func (suite *ConfigSuite) TestParseInvalidLoglevel() {

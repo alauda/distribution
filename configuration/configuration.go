@@ -453,7 +453,7 @@ func (version *Version) UnmarshalYAML(unmarshal func(any) error) error {
 var CurrentVersion = MajorMinorVersion(0, 1)
 
 // Loglevel is the level at which operations are logged
-// This can be error, warn, info, or debug
+// This can be error, warn, info, debug, fatal, or panic
 type Loglevel string
 
 // UnmarshalYAML implements the yaml.Umarshaler interface
@@ -468,9 +468,9 @@ func (loglevel *Loglevel) UnmarshalYAML(unmarshal func(any) error) error {
 
 	loglevelString = strings.ToLower(loglevelString)
 	switch loglevelString {
-	case "error", "warn", "info", "debug":
+	case "error", "warn", "info", "debug", "fatal", "panic":
 	default:
-		return fmt.Errorf("invalid loglevel %s Must be one of [error, warn, info, debug]", loglevelString)
+		return fmt.Errorf("invalid loglevel %s Must be one of [error, warn, info, debug, fatal, panic]", loglevelString)
 	}
 
 	*loglevel = Loglevel(loglevelString)
